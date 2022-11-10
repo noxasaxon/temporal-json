@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, hash::Hash, str::FromStr};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, EnumDiscriminants, Clone)]
 #[serde(tag = "type")]
 #[strum_discriminants(derive(EnumString, Display))]
 pub enum TemporalInteraction {
@@ -70,25 +70,9 @@ impl TemporalInteraction {
             }),
         }
     }
-
-    // pub async fn execute(self) -> Result<TemporalInteractionResponse> {
-    //     Ok(match self {
-    //         TemporalInteraction::Execute(wf_info) => {
-    //             TemporalInteractionResponse::from(start_temporal_workflow(wf_info).await?)
-    //         }
-    //         TemporalInteraction::Signal(signal_info) => {
-    //             TemporalInteractionResponse::from(signal_temporal(signal_info).await?)
-    //         }
-    //         TemporalInteraction::Query(query_info) => {
-    //             // we need `try_from` here because queries can return arbitrary data from the workflow,
-    //             // which requires a fallible attempt at JSON conversion via serde
-    //             TemporalInteractionResponse::try_from(query_temporal(query_info).await?)?
-    //         }
-    //     })
-    // }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct ExecuteTemporalWorkflow {
     pub namespace: String,
     pub task_queue: String,
@@ -98,7 +82,7 @@ pub struct ExecuteTemporalWorkflow {
     pub args: Option<Vec<serde_json::Value>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
 pub struct SignalTemporal {
     pub namespace: String,
     pub task_queue: String,
@@ -123,7 +107,7 @@ pub struct TemporalWorkflowExecutionInfo {
     pub run_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct QueryTemporal {
     pub namespace: String,
     pub task_queue: String,
@@ -287,7 +271,7 @@ impl Encoder {
                             workflow_id: KeysToTemporalAction::W
                                 .get_value(&mut encoder_map)?
                                 .into(),
-                            workflow_type: KeysToTemporalAction::W
+                            workflow_type: KeysToTemporalAction::Y
                                 .get_value(&mut encoder_map)?
                                 .into(),
                             args: None,
@@ -334,6 +318,19 @@ impl Encoder {
             }
         }
     }
+
+    pub fn encode_default_from_json_string(temporal_action_as_json_str: &str) -> Result<String> {
+        let interaction: TemporalInteraction = serde_json::from_str(temporal_action_as_json_str)?;
+
+        Ok(Self::default().encode(interaction))
+    }
+
+    pub fn decode_to_json_string(encoded_str: &str) -> Result<String> {
+        let as_temporal_struct = Self::decode(encoded_str)?;
+
+        serde_json::to_string(&as_temporal_struct)
+            .with_context(|| "unable to convert temporal interaction to json")
+    }
 }
 
 #[derive(EnumIter, EnumString, Display, PartialEq, Eq, Hash, Debug)]
@@ -376,6 +373,8 @@ impl KeysToTemporalAction {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
     use crate::{SignalTemporal, TemporalInteraction};
 
@@ -388,6 +387,18 @@ mod tests {
             signal_name: "signal_name_thats_defined_in_workflow".into(),
             input: None,
             ..Default::default()
+        })
+    }
+
+    fn build_mock_wf_exec() -> TemporalInteraction {
+        TemporalInteraction::Execute(ExecuteTemporalWorkflow {
+            namespace: "security-engineering".into(),
+            task_queue: "security-eng-task-queue-rs".into(),
+            workflow_id: "some-super-long-uuid-string".into(),
+            workflow_type: "some-wf-function-name".into(),
+            args: Some(vec![json!({
+                    "arg1" : "value1"
+            })]),
         })
     }
 
@@ -416,13 +427,34 @@ mod tests {
     #[test]
     fn test_encode_decode_all_encoder_versions() {
         for encoder_version in Encoder::iter() {
-            let callback_id = encoder_version.encode(build_mock_signal());
+            for temporal_event in [build_mock_signal(), build_mock_wf_exec()] {
+                // get expected decoded item for each event type
+                let expected_output = match &temporal_event {
+                    TemporalInteraction::Execute(exec_wf) => {
+                        TemporalInteraction::Execute(ExecuteTemporalWorkflow {
+                            args: None,
+                            ..exec_wf.to_owned()
+                        })
+                    }
+                    TemporalInteraction::Signal(_sig_wf) => temporal_event.to_owned(),
+                    TemporalInteraction::Query(_query_wf) => temporal_event.to_owned(),
+                };
 
-            let parsed = Encoder::decode(&callback_id).expect(&format!(
-                "failed to decode. version {encoder_version} for string {callback_id}"
-            ));
+                // as struct
+                let callback_id = encoder_version.encode(temporal_event.clone());
+                let parsed = Encoder::decode(&callback_id).expect(&format!(
+                    "failed to decode. version {encoder_version} for string {callback_id}"
+                ));
+                assert_eq!(expected_output, parsed);
 
-            assert_eq!(build_mock_signal(), parsed)
+                // as json string
+                let as_string = serde_json::to_string(&temporal_event).unwrap();
+                let callback_id = Encoder::encode_default_from_json_string(&as_string).unwrap();
+                let parsed = Encoder::decode(&callback_id).expect(&format!(
+                    "failed to decode. version {encoder_version} for string {callback_id}"
+                ));
+                assert_eq!(expected_output, parsed)
+            }
         }
     }
 }
