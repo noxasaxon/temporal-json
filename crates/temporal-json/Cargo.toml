@@ -13,3 +13,18 @@ serde_json = "1.0"
 
 # Enum Utils
 strum = {version = "0.24", features = ["derive"]}
+
+
+## exporting to other languages
+# python
+pyo3 = {version = "0.17.3", optional = true}
+# js
+# Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
+napi = { version = "2.7.0", default-features = false, features = ["napi4"], optional = true }
+napi-derive = {version = "2.7.0", optional = true}
+
+
+[features]
+default = []
+python = ["dep:pyo3"]
+js = ["dep:napi", "dep:napi-derive"]

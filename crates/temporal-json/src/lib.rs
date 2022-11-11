@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Context, Result};
+#[cfg(feature = "js")]
+use napi::bindgen_prelude::*;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, hash::Hash, str::FromStr};
 use strum::{Display, EnumDiscriminants, EnumIter, EnumString, IntoEnumIterator};
@@ -83,6 +85,7 @@ pub struct ExecuteTemporalWorkflow {
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Default, Clone)]
+
 pub struct SignalTemporal {
     pub namespace: String,
     pub task_queue: String,
@@ -137,6 +140,8 @@ pub const ENCODER_HELP_MSG: &str =
     "Encoder string format: version~temporal_key:temporal_value~user_data";
 
 #[derive(EnumIter, EnumString, Display, PartialEq, Eq, Hash, Debug)]
+#[cfg(feature = "js")]
+#[napi_derive::napi]
 pub enum Encoder {
     A,
 }
@@ -224,7 +229,7 @@ impl Encoder {
     /// Users can supply their own data after the encoding by adding a delimiter `~` after the encoding before their data.
     /// character limit for entire string is 255, and the temporal info takes up around 170 chars.
     ///
-    /// `"A~E:Signal,W:some-super-long-uuid-string,N:security-engineering,T:security-eng-task-queue-rs,R:some-equally-long-uuid-string,S:signal_name_thats_defined_in_workflow~Some User Defined Data Under 80 chars"`
+    /// `"A~E:Signal,W:some-super-long-uuid-string,N:test-namespace,T:test-task-queue-rs,R:some-equally-long-uuid-string,S:signal_name_thats_defined_in_workflow~Some User Defined Data Under 80 chars"`
     pub fn decode(encoded_str: &str) -> Result<TemporalInteraction> {
         let (encoder_version, encoded_str_without_version) = Self::from_encoded_str(encoded_str)?;
 
@@ -380,8 +385,8 @@ mod tests {
 
     fn build_mock_signal() -> TemporalInteraction {
         TemporalInteraction::Signal(SignalTemporal {
-            namespace: "security-engineering".into(),
-            task_queue: "security-eng-task-queue-rs".into(),
+            namespace: "test-namespace".into(),
+            task_queue: "test-task-queue-rs".into(),
             workflow_id: Some("some-super-long-uuid-string".into()),
             run_id: Some("some-equally-long-uuid-string".into()),
             signal_name: "signal_name_thats_defined_in_workflow".into(),
@@ -392,8 +397,8 @@ mod tests {
 
     fn build_mock_wf_exec() -> TemporalInteraction {
         TemporalInteraction::Execute(ExecuteTemporalWorkflow {
-            namespace: "security-engineering".into(),
-            task_queue: "security-eng-task-queue-rs".into(),
+            namespace: "test-namespace".into(),
+            task_queue: "test-task-queue-rs".into(),
             workflow_id: "some-super-long-uuid-string".into(),
             workflow_type: "some-wf-function-name".into(),
             args: Some(vec![json!({

@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "seceng_temporal_json"
+name = "noxasaxon_temporal_json"
 version = "0.0.0"
 
 [lib]
@@ -10,8 +10,7 @@ crate-type = ["cdylib"]
 # Default enable napi4 feature, see https://nodejs.org/api/n-api.html#node-api-version-matrix
 napi = { version = "2.10.0", default-features = false, features = ["napi4"] }
 napi-derive = "2.9.1"
-# temporal-json = {path = "../temporal-json", features = ["js"]}
-temporal-json = {path = "../temporal-json"}
+temporal-json = {path = "../temporal-json", features = ["js"]}
 
 anyhow = {version = "1.0"}
 
