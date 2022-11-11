@@ -140,8 +140,7 @@ pub const ENCODER_HELP_MSG: &str =
     "Encoder string format: version~temporal_key:temporal_value~user_data";
 
 #[derive(EnumIter, EnumString, Display, PartialEq, Eq, Hash, Debug)]
-#[cfg(feature = "js")]
-#[napi_derive::napi]
+#[cfg_attr(feature = "js", napi_derive::napi)]
 pub enum Encoder {
     A,
 }
